@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #fcf9f6;
+  --foreground: #211814;
+  --surface: #ffffff;
+  --surface-warm: #f7f1ea;
+  --border: #eadbcf;
+  --primary: #b84f28;
+  --secondary: #d47a12;
+  --success: #2d6a4f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(180deg, rgba(184, 79, 40, 0.06), transparent 320px),
+    var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(212, 122, 18, 0.45);
+  outline-offset: 2px;
+}
+
+.app-shell {
+  margin: 0 auto;
+  max-width: 1180px;
+  padding: 24px 16px 96px;
+}
+
+.app-card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: 0 14px 40px rgba(88, 48, 25, 0.07);
+}
+
+.warm-card {
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, #fff, var(--surface-warm));
+  border-radius: 18px;
+}
+
+.field {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px 14px;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #4f3a31;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.primary-button {
+  border-radius: 14px;
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+  min-height: 48px;
+  padding: 12px 18px;
+}
+
+.secondary-button {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--foreground);
+  font-weight: 700;
+  min-height: 48px;
+  padding: 12px 18px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}

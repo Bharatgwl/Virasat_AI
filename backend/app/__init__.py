@@ -1,0 +1,2 @@
+"""Viraasat AI FastAPI backend."""
+

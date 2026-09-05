@@ -1,5 +1,10 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+).replace(/\/+$/, "");
+
+function apiUrl(path: string) {
+  return `${API_BASE_URL}/${path.replace(/^\/+/, "")}`;
+}
 
 const sessionTokenKey = "viraasat_auth_token";
 
@@ -42,7 +47,7 @@ export async function apiRequest<T>(
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...options,
     headers,
   });

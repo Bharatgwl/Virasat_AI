@@ -105,6 +105,9 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLIC_PUBLISHABLE_KEY
 Only the Supabase publishable key belongs in the frontend. Never use the
 Supabase secret/service-role key in a `NEXT_PUBLIC_` variable.
 
+Enter `NEXT_PUBLIC_API_BASE_URL` without a trailing slash. The frontend also
+normalizes it defensively so API paths never contain a double slash.
+
 Deploy and copy the production frontend URL. If it differs from the value used
 for backend `FRONTEND_ORIGINS`, correct that backend variable and redeploy the
 backend. Environment-variable changes affect only new deployments.

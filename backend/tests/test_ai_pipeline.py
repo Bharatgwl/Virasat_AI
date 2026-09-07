@@ -48,7 +48,18 @@ class FakeCatalogProvider:
         )
 
 
-def test_multimodal_generation_uses_language_and_catalog_services(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("audio_filename", "audio_mime_type"),
+    [
+        ("description.webm", "audio/webm"),
+        ("description.m4a", "audio/mp4"),
+    ],
+)
+def test_multimodal_generation_uses_language_and_catalog_services(
+    monkeypatch,
+    audio_filename: str,
+    audio_mime_type: str,
+) -> None:
     monkeypatch.setattr(snaplist, "SarvamLanguageService", lambda: FakeLanguageService())
     monkeypatch.setattr(snaplist, "get_catalog_provider", lambda _name: FakeCatalogProvider())
 
@@ -65,7 +76,7 @@ def test_multimodal_generation_uses_language_and_catalog_services(monkeypatch) -
         },
         files={
             "image": ("product.png", b"example-image", "image/png"),
-            "audio": ("description.webm", b"example-audio", "audio/webm"),
+            "audio": (audio_filename, b"example-audio", audio_mime_type),
         },
     )
 

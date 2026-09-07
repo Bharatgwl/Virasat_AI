@@ -17,6 +17,32 @@ function joinList(value: string[]) {
   return value.join(", ");
 }
 
+const RECORDER_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/mp4;codecs=mp4a.40.2",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+] as const;
+
+function recorderOptions(): MediaRecorderOptions | undefined {
+  const mimeType = RECORDER_MIME_TYPES.find((candidate) => MediaRecorder.isTypeSupported(candidate));
+  return mimeType ? { mimeType } : undefined;
+}
+
+function audioFileFromBlob(blob: Blob): File {
+  const mimeType = blob.type.split(";", 1)[0].toLowerCase() || "audio/webm";
+  const extension = mimeType === "audio/mp4" || mimeType === "audio/x-m4a"
+    ? "m4a"
+    : mimeType === "audio/ogg"
+      ? "ogg"
+      : mimeType === "audio/mpeg"
+        ? "mp3"
+        : mimeType === "audio/aac" || mimeType === "audio/x-aac"
+          ? "aac"
+          : "webm";
+  return new File([blob], `artisan-voice-note.${extension}`, { type: mimeType });
+}
+
 export default function AddProductPage() {
   const router = useRouter();
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
@@ -73,7 +99,8 @@ export default function AddProductPage() {
     setError("");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const options = recorderOptions();
+      const recorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
       chunksRef.current = [];
       setAudioBlob(null);
       recorder.ondataavailable = (event) => {
@@ -121,9 +148,7 @@ export default function AddProductPage() {
       return;
     }
 
-    const audioFile = audioBlob
-      ? new File([audioBlob], "artisan-voice-note.webm", { type: audioBlob.type || "audio/webm" })
-      : undefined;
+    const audioFile = audioBlob ? audioFileFromBlob(audioBlob) : undefined;
 
     setBusy(true);
     try {
@@ -157,9 +182,7 @@ export default function AddProductPage() {
     setError("");
     try {
       const imageUpload = await uploadFile("image", image);
-      const audioFile = audioBlob
-        ? new File([audioBlob], "artisan-voice-note.webm", { type: audioBlob.type || "audio/webm" })
-        : null;
+      const audioFile = audioBlob ? audioFileFromBlob(audioBlob) : null;
       const audioUpload = audioFile ? await uploadFile("audio", audioFile) : null;
       const product = await createProductFromListing({
         listing,

@@ -12,7 +12,17 @@ from app.core.config import get_settings
 router = APIRouter(prefix="/seller/uploads", tags=["seller-uploads"])
 
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-AUDIO_TYPES = {"audio/webm", "audio/ogg", "audio/mpeg", "audio/wav", "audio/x-wav"}
+AUDIO_TYPES = {
+    "audio/webm",
+    "audio/ogg",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/aac",
+    "audio/x-aac",
+}
 FILE_SUFFIXES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -22,6 +32,10 @@ FILE_SUFFIXES = {
     "audio/mpeg": ".mp3",
     "audio/wav": ".wav",
     "audio/x-wav": ".wav",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/aac": ".aac",
+    "audio/x-aac": ".aac",
 }
 settings = get_settings()
 
@@ -41,6 +55,10 @@ def _has_valid_signature(content: bytes, content_type: str) -> bool:
         return content.startswith(b"ID3") or (len(content) >= 2 and content[0] == 0xFF and content[1] & 0xE0 == 0xE0)
     if content_type in {"audio/wav", "audio/x-wav"}:
         return len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WAVE"
+    if content_type in {"audio/mp4", "audio/x-m4a"}:
+        return len(content) >= 12 and content[4:8] == b"ftyp"
+    if content_type in {"audio/aac", "audio/x-aac"}:
+        return len(content) >= 2 and content[0] == 0xFF and content[1] & 0xF6 == 0xF0
     return False
 
 

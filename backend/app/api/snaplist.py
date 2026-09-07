@@ -19,7 +19,17 @@ settings = get_settings()
 ai_request_guard = AiRequestGuard(settings)
 
 IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-AUDIO_TYPES = {"audio/webm", "audio/ogg", "audio/mpeg", "audio/wav", "audio/x-wav"}
+AUDIO_TYPES = {
+    "audio/webm",
+    "audio/ogg",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/aac",
+    "audio/x-aac",
+}
 if get_settings().environment.lower() in {"development", "test"}:
     @router.post("/process", response_model=CatalogDraft, include_in_schema=False)
     def process_product(request: CatalogRequest) -> CatalogDraft:
@@ -60,7 +70,7 @@ async def generate_catalog(
     if audio:
         audio_type = (audio.content_type or "").split(";", maxsplit=1)[0].lower()
         if audio_type not in AUDIO_TYPES:
-            raise AppError("UNSUPPORTED_AUDIO", "Use a WebM, OGG, MP3, or WAV recording.")
+            raise AppError("UNSUPPORTED_AUDIO", "Use a WebM, OGG, MP3, WAV, M4A, or AAC recording.")
         audio_bytes = await audio.read(settings.ai_max_audio_bytes + 1)
         if len(audio_bytes) > settings.ai_max_audio_bytes:
             raise AppError("AUDIO_TOO_LARGE", "The recording is too large. Record a voice note under 30 seconds.")
@@ -122,6 +132,5 @@ async def generate_catalog(
         fingerprint=fingerprint,
         operation=generate,
     )
-
 
 

@@ -1,4 +1,5 @@
 import base64
+import logging
 
 import httpx
 
@@ -8,6 +9,8 @@ from app.schemas.catalog import CatalogModelOutput
 from app.services.ai.base import CatalogGenerationInput
 from app.services.ai.json_parser import parse_catalog_json
 from app.services.ai.prompt import SYSTEM_PROMPT, build_user_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaCatalogProvider:
@@ -46,17 +49,86 @@ class OllamaCatalogProvider:
                 response = await client.post(endpoint, headers=headers, json=payload)
                 if len(response.content) > self.settings.ai_max_response_bytes:
                     raise AppError("AI_RESPONSE_TOO_LARGE", "Ollama returned an unexpectedly large response.", 502, True)
-                if response.status_code == 429:
-                    raise AppError("AI_PROVIDER_RATE_LIMITED", "Ollama is temporarily rate limited.", 503, True, 30)
-                response.raise_for_status()
+                self._raise_for_provider_status(response)
         except AppError:
             raise
+        except httpx.TimeoutException as exc:
+            raise AppError(
+                "AI_PROVIDER_TIMEOUT",
+                "Ollama took too long to respond. Please try again.",
+                504,
+                True,
+                15,
+            ) from exc
+        except httpx.ConnectError as exc:
+            raise AppError(
+                "AI_PROVIDER_UNREACHABLE",
+                "The backend could not connect to Ollama. Please try again shortly.",
+                503,
+                True,
+                15,
+            ) from exc
         except httpx.HTTPError as exc:
-            raise AppError("AI_PROVIDER_FAILED", "Ollama could not generate the catalogue.", 502, True) from exc
+            raise AppError(
+                "AI_PROVIDER_FAILED",
+                "Ollama could not generate the catalogue due to a network error.",
+                502,
+                True,
+            ) from exc
 
         try:
             body = response.json()
         except ValueError as exc:
             raise AppError("AI_INVALID_RESPONSE", "Ollama returned an invalid response.", 502, True) from exc
         content = (body.get("message") or {}).get("content", "")
+        if not isinstance(content, str) or not content.strip():
+            raise AppError("AI_EMPTY_RESPONSE", "Ollama returned an empty catalogue response.", 502, True)
         return parse_catalog_json(content, "Ollama")
+
+    def _raise_for_provider_status(self, response: httpx.Response) -> None:
+        status = response.status_code
+        if status < 400:
+            return
+
+        # Do not log the response body: an upstream error can echo request data.
+        logger.warning(
+            "Ollama request rejected: status=%s model=%s endpoint_host=%s",
+            status,
+            self.settings.ollama_model,
+            response.request.url.host if response.request else "unknown",
+        )
+        if status in {401, 403}:
+            raise AppError(
+                "AI_PROVIDER_AUTH_FAILED",
+                "Ollama rejected the backend API key. Update OLLAMA_API_KEY and redeploy.",
+                503,
+            )
+        if status == 404:
+            raise AppError(
+                "AI_MODEL_NOT_AVAILABLE",
+                f"Ollama model '{self.settings.ollama_model}' is unavailable or retired. Update OLLAMA_MODEL to an available vision model.",
+                503,
+            )
+        if status == 429:
+            raise AppError(
+                "AI_PROVIDER_RATE_LIMITED",
+                "Ollama is temporarily rate limited. Please try again shortly.",
+                503,
+                True,
+                30,
+            )
+        if status in {400, 422}:
+            raise AppError(
+                "AI_PROVIDER_REQUEST_REJECTED",
+                f"Ollama rejected the image request for model '{self.settings.ollama_model}'. Verify that it is an available vision model.",
+                502,
+            )
+        if status >= 500:
+            raise AppError(
+                "AI_PROVIDER_UNAVAILABLE",
+                "Ollama is temporarily unavailable. Please try again shortly.",
+                503,
+                True,
+                30,
+            )
+        raise AppError("AI_PROVIDER_FAILED", "Ollama rejected the catalogue request.", 502)

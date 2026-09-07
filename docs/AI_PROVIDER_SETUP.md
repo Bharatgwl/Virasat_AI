@@ -26,12 +26,13 @@ Default configuration:
 ```dotenv
 AI_PROVIDER=ollama
 OLLAMA_API_KEY=your-key
-OLLAMA_MODEL=gemma3:27b
+OLLAMA_MODEL=gemma4:31b
 OLLAMA_BASE_URL=https://ollama.com/api
 ```
 
-The model is configurable because Ollama's cloud catalogue changes. Choose a model marked
-both **Cloud** and **Vision**. This project validates the model's JSON in Python because
+The model is configurable because Ollama's cloud catalogue changes. `gemma3:27b` was
+retired by Ollama Cloud on July 15, 2026; do not use that older value. Choose a currently
+available model marked both **Cloud** and **Vision**. This project validates the model's JSON in Python because
 Ollama Cloud does not currently guarantee schema-constrained structured output.
 
 For a local Ollama installation, change `OLLAMA_BASE_URL` to `http://localhost:11434/api`.

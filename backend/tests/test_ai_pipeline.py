@@ -1,5 +1,6 @@
 import asyncio
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,6 +13,7 @@ from app.schemas.catalog import CatalogModelOutput
 from app.services.ai.base import CatalogGenerationInput
 from app.services.ai.factory import get_catalog_provider
 from app.services.ai.json_parser import parse_catalog_json
+from app.services.ai.ollama_provider import OllamaCatalogProvider
 from app.services.sarvam_language import LanguageContext, SarvamLanguageService, normalize_language_code
 
 
@@ -103,6 +105,42 @@ def test_factory_rejects_unknown_provider() -> None:
     with pytest.raises(AppError) as error:
         get_catalog_provider("not-a-provider")
     assert error.value.code == "UNKNOWN_AI_PROVIDER"
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_code", "retryable"),
+    [
+        (401, "AI_PROVIDER_AUTH_FAILED", False),
+        (404, "AI_MODEL_NOT_AVAILABLE", False),
+        (429, "AI_PROVIDER_RATE_LIMITED", True),
+        (500, "AI_PROVIDER_UNAVAILABLE", True),
+    ],
+)
+def test_ollama_provider_maps_safe_actionable_errors(
+    status_code: int,
+    expected_code: str,
+    retryable: bool,
+) -> None:
+    provider = OllamaCatalogProvider(get_settings_for_ollama_test())
+    request = httpx.Request("POST", "https://ollama.com/api/chat")
+    response = httpx.Response(status_code, request=request, json={"error": "sensitive upstream detail"})
+
+    with pytest.raises(AppError) as error:
+        provider._raise_for_provider_status(response)
+
+    assert error.value.code == expected_code
+    assert error.value.retryable is retryable
+    assert "sensitive upstream detail" not in error.value.message
+
+
+def get_settings_for_ollama_test():
+    from app.core.config import Settings
+
+    return Settings(
+        _env_file=None,
+        ollama_api_key="test-key",
+        ollama_model="gemma4:31b",
+    )
 
 
 @pytest.mark.parametrize(

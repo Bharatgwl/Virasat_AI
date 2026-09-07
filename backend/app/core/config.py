@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
     ollama_api_key: str | None = None
-    ollama_model: str = "gemma3:27b"
+    ollama_model: str = "gemma4:31b"
     ollama_base_url: str = "https://ollama.com/api"
     sarvam_api_key: str | None = None
     sarvam_base_url: str = "https://api.sarvam.ai"

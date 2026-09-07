@@ -58,6 +58,9 @@ def _decode_session_token(token: str) -> dict | None:
             return None
         expected = hmac.new(get_settings().session_signing_key.encode(), encoded.encode(), hashlib.sha256).digest()
         signature = base64.urlsafe_b64decode(provided_signature + "=" * (-len(provided_signature) % 4))
+        canonical_signature = base64.urlsafe_b64encode(signature).decode().rstrip("=")
+        if not hmac.compare_digest(provided_signature, canonical_signature):
+            return None
         if not hmac.compare_digest(signature, expected):
             return None
         payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))

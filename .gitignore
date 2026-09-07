@@ -23,5 +23,5 @@ backend/.env
 .DS_Store
 Thumbs.db
 
-supabase/
-docs/
+# Database migrations and project documentation are source files and must be
+# committed. Never put real credentials in either directory.

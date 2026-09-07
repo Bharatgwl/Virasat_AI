@@ -1,4 +1,4 @@
-import { apiRequest, clearSessionToken, setSessionToken } from "@/lib/api-client";
+import { apiRequest } from "@/lib/api-client";
 import type { Account, AccountRole } from "@/lib/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
@@ -23,7 +23,6 @@ export type AccountLoginInput = {
 type AccountSession = {
   account: Account;
   token_type: "app" | "supabase";
-  access_token: string;
 };
 
 export function validateAccountSignup(input: AccountSignupInput) {
@@ -31,7 +30,7 @@ export function validateAccountSignup(input: AccountSignupInput) {
   if (input.display_name.trim().length < 2) errors.display_name = "Enter a name.";
   if (!/^[6-9]\d{9}$/.test(input.phone.trim())) errors.phone = "Enter a valid 10 digit Indian mobile number.";
   if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) errors.email = "Enter a valid email.";
-  if (input.password.length < 6) errors.password = "Password must be at least 6 characters.";
+  if (input.password.length < 8) errors.password = "Password must be at least 8 characters.";
   if (input.password !== input.confirm_password) errors.confirm_password = "Passwords do not match.";
   return errors;
 }
@@ -61,10 +60,11 @@ export function setActiveAccount(account: Account) {
 export function clearAccountSession() {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(sessionKey);
+    // Clean up bearer tokens left by releases before HttpOnly cookie sessions.
+    window.localStorage.removeItem("viraasat_auth_token");
     window.localStorage.removeItem("viraasat_artisan_profile");
     window.localStorage.removeItem("viraasat_buyer_profile");
   }
-  clearSessionToken();
 }
 
 function saveSession(session: AccountSession) {
@@ -74,7 +74,7 @@ function saveSession(session: AccountSession) {
     window.localStorage.removeItem("viraasat_buyer_profile");
   }
   setActiveAccount(session.account);
-  setSessionToken(session.access_token);
+  window.localStorage.removeItem("viraasat_auth_token");
   return session.account;
 }
 
@@ -128,7 +128,7 @@ export function refreshAccount(): Promise<Account | null> {
 }
 
 export async function logoutAccount() {
-  await apiRequest("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+  await apiRequest("/api/auth/logout", { method: "POST" });
   await getSupabaseBrowserClient()?.auth.signOut().catch(() => undefined);
   clearAccountSession();
 }

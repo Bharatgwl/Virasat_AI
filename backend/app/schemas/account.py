@@ -13,7 +13,7 @@ class AccountSignup(BaseModel):
     display_name: str = Field(min_length=2, max_length=120)
     phone: str = Field(min_length=10, max_length=10)
     email: str | None = Field(default=None, max_length=180)
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
 
     @field_validator("phone")
     @classmethod

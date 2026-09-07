@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     app_session_secret: str | None = None
     frontend_origins: str = "http://localhost:3000"
     frontend_origin_regex: str | None = None
+    auth_requests_per_minute: int = Field(default=20, ge=5, le=120)
     ai_provider: str = "ollama"
     ai_timeout_seconds: float = Field(default=45.0, ge=5, le=120)
     ai_request_deadline_seconds: float = Field(default=70.0, ge=10, le=180)

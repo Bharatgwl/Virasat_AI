@@ -1,8 +1,7 @@
 from uuid import UUID
 
 from app.core.errors import AppError
-from app.schemas.order import Cart, CartItem, CartItemCreate, Order, OrderCreate, OrderItem
-from app.services.buyer_service import get_buyer
+from app.schemas.order import Cart, CartItem, CartItemCreate, Order, OrderCreate
 from app.services.supabase_client import get_supabase
 
 
@@ -97,55 +96,35 @@ def remove_cart_item(buyer_id: UUID, product_id: UUID) -> Cart:
 
 
 def place_order(request: OrderCreate) -> Order:
-    buyer = get_buyer(request.buyer_id)
-    order_items: list[OrderItem] = []
-    total = 0
-    for item in request.items:
-        product = _get_published_product(item.product_id)
-        _ensure_stock(product, item.quantity)
-        unit_price = int(product["price_inr"])
-        line_total = unit_price * item.quantity
-        total += line_total
-        order_items.append(
-            OrderItem(
-                product_id=item.product_id,
-                artisan_id=product.get("artisan_id"),
-                quantity=item.quantity,
-                unit_price_inr=unit_price,
-                line_total_inr=line_total,
-                product_title=product.get("title"),
-            )
-        )
-
-    order_payload = {
-        "buyer_id": str(request.buyer_id),
-        "buyer_name": buyer.buyer_name,
-        "buyer_contact": buyer.phone,
-        "delivery_address": request.delivery_address,
-        "total_inr": total,
-        "status": "placed",
-        "payment_mode": request.payment_mode,
-    }
-    order_response = get_supabase().table("orders").insert(order_payload).execute()
-    if not order_response.data:
-        raise AppError("ORDER_CREATE_FAILED", "The order could not be placed.", 500, True)
-    order = order_response.data[0]
-
-    item_payloads = [
-        {
-            "order_id": order["id"],
-            "product_id": str(item.product_id),
-            "artisan_id": str(item.artisan_id) if item.artisan_id else None,
-            "quantity": item.quantity,
-            "unit_price_inr": item.unit_price_inr,
-            "line_total_inr": item.line_total_inr,
+    try:
+        response = get_supabase().rpc(
+            "place_buyer_order",
+            {
+                "p_buyer_id": str(request.buyer_id),
+                "p_items": [item.model_dump(mode="json") for item in request.items],
+                "p_delivery_address": request.delivery_address,
+                "p_payment_mode": request.payment_mode,
+                "p_idempotency_key": str(request.idempotency_key),
+            },
+        ).execute()
+    except Exception as exc:
+        message = str(exc)
+        known_errors = {
+            "BUYER_NOT_FOUND": ("BUYER_NOT_FOUND", "The buyer profile was not found.", 404),
+            "PRODUCT_NOT_AVAILABLE": ("PRODUCT_NOT_AVAILABLE", "A product is no longer available.", 409),
+            "INSUFFICIENT_STOCK": ("INSUFFICIENT_STOCK", "A product does not have enough stock.", 409),
+            "DUPLICATE_ORDER_PRODUCT": ("INVALID_ORDER", "An order cannot contain the same product twice.", 400),
+            "INVALID_ORDER_QUANTITY": ("INVALID_ORDER", "An order quantity is invalid.", 400),
         }
-        for item in order_items
-    ]
-    inserted_items = get_supabase().table("order_items").insert(item_payloads).execute()
-    saved_items = inserted_items.data or item_payloads
-    get_supabase().table("cart_items").delete().eq("buyer_id", str(request.buyer_id)).execute()
-    return Order.model_validate({**order, "items": saved_items})
+        for marker, (code, public_message, status) in known_errors.items():
+            if marker in message:
+                raise AppError(code, public_message, status) from exc
+        raise AppError("ORDER_CREATE_FAILED", "The order could not be placed safely.", 500, True) from exc
+
+    if not response.data:
+        raise AppError("ORDER_CREATE_FAILED", "The order could not be placed safely.", 500, True)
+    payload = response.data[0] if isinstance(response.data, list) else response.data
+    return Order.model_validate(payload)
 
 
 def list_orders(buyer_id: UUID | None = None) -> list[Order]:

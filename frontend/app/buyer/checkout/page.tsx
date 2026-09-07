@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCart, getCurrentBuyer, placeOrder } from "@/lib/services/buyers";
-import type { BuyerProfile, CartItem, Order } from "@/lib/types";
+import type { BuyerProfile, CartItem } from "@/lib/types";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -12,8 +12,9 @@ export default function CheckoutPage() {
   const [items, setItems] = useState<CartItem[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
-  const [paymentMode, setPaymentMode] = useState<Order["payment_mode"]>("cod");
+  const [paymentMode, setPaymentMode] = useState<"upi" | "cod">("cod");
   const [busy, setBusy] = useState(false);
+  const idempotencyKey = useRef<string | null>(null);
 
   useEffect(() => {
     Promise.all([getCurrentBuyer(), getCart()])
@@ -36,7 +37,9 @@ export default function CheckoutPage() {
     }
     setBusy(true);
     try {
-      await placeOrder({ buyer, items, payment_mode: paymentMode });
+      idempotencyKey.current ??= crypto.randomUUID();
+      await placeOrder({ buyer, items, payment_mode: paymentMode, idempotency_key: idempotencyKey.current });
+      idempotencyKey.current = null;
       router.push("/buyer/orders");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Could not place order.");

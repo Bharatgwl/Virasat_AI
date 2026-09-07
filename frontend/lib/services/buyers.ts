@@ -102,7 +102,8 @@ export async function getOrders(): Promise<Order[]> {
 export async function placeOrder(input: {
   buyer: BuyerProfile;
   items: CartItem[];
-  payment_mode: Order["payment_mode"];
+  payment_mode: "upi" | "cod";
+  idempotency_key: string;
 }): Promise<Order> {
   return apiRequest<Order>("/api/buyer/orders", {
     method: "POST",
@@ -111,6 +112,7 @@ export async function placeOrder(input: {
       items: input.items.map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
       payment_mode: input.payment_mode,
       delivery_address: input.buyer.delivery_address,
+      idempotency_key: input.idempotency_key,
     }),
   });
 }

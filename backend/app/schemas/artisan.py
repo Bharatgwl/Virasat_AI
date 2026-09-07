@@ -35,7 +35,7 @@ class ArtisanCreate(BaseModel):
 
 class Artisan(ArtisanCreate):
     id: UUID
-    ondc_status: Literal["not_connected", "demo_ready", "connected"] = "demo_ready"
+    ondc_status: Literal["not_connected", "connected"] = "not_connected"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

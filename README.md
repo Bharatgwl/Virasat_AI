@@ -44,7 +44,7 @@ Frontend: `http://localhost:3000`
 
 For Google OAuth, `frontend/.env.local` also needs `NEXT_PUBLIC_SUPABASE_URL` and the public `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Supabase secret/service-role credentials belong only in `backend/.env` and must never be exposed to the browser.
 
-Complete [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) before testing uploads, publishing, the marketplace, or the artisan dashboard. Google OAuth setup is documented in [docs/SUPABASE_GOOGLE_AUTH_SETUP.md](docs/SUPABASE_GOOGLE_AUTH_SETUP.md).
+Complete [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md), including migrations 001 through 006 in order, before testing authentication, uploads, publishing, checkout, or dashboards. Google OAuth setup is documented in [docs/SUPABASE_GOOGLE_AUTH_SETUP.md](docs/SUPABASE_GOOGLE_AUTH_SETUP.md).
 
 Complete [docs/AI_PROVIDER_SETUP.md](docs/AI_PROVIDER_SETUP.md) to configure Ollama Cloud or OpenAI plus Sarvam. The web form uses the real multimodal `/api/snaplist/generate` pipeline, uploads real media, creates a database product, and supports review/publish. The legacy `/api/snaplist/process` route is hidden and disabled when `ENVIRONMENT=production`.
 

@@ -18,6 +18,8 @@ In Supabase SQL Editor, run migrations in this order if not already applied:
 002_version_2_dashboard.sql
 003_multimodal_ai.sql
 004_accounts_buyers_orders.sql
+005_strict_role_separation.sql
+006_production_order_integrity.sql
 ```
 
 Migration `004_accounts_buyers_orders.sql` adds:
@@ -31,6 +33,11 @@ Migration `004_accounts_buyers_orders.sql` adds:
 - expanded product listing fields
 - product status lifecycle: `draft`, `generated`, `ready`, `published`
 
+Migration `005` enforces permanent seller/buyer profile ownership. Migration
+`006` removes demo defaults, creates revocable app sessions, and installs the
+atomic checkout function. The backend must not be deployed with the new code
+until all six migrations have completed successfully.
+
 ## 2. Backend environment variables
 
 Only backend receives Supabase service credentials.
@@ -38,7 +45,7 @@ Only backend receives Supabase service credentials.
 ```dotenv
 SUPABASE_URL=your-supabase-project-url
 SUPABASE_SECRET_KEY=your-service-role-key
-SUPABASE_ANON_KEY=your-legacy-anon-key-if-needed
+APP_SESSION_SECRET=generate-a-separate-long-random-secret
 FRONTEND_ORIGINS=http://localhost:3000
 ```
 
@@ -104,7 +111,9 @@ The publishable key is designed for browser use. A legacy anon key is also suppo
 
 ## 4. Backend Google auth endpoint
 
-The frontend Google buttons now start Supabase PKCE OAuth and return to `/auth/callback`. The callback receives a Supabase access token and sends it to:
+The frontend Google buttons start Supabase PKCE OAuth and return to
+`/auth/callback`. The callback receives a Supabase access token and sends it
+through the same-origin Next.js proxy to:
 
 ```text
 POST /api/auth/google
@@ -141,9 +150,14 @@ Response:
     "auth_provider": "google"
   },
   "token_type": "supabase",
-  "access_token": "supabase:seller:uuid"
+  "access_token": "signed-opaque-app-session-token"
 }
 ```
+
+The Next.js proxy removes `access_token` from the browser-visible response and
+stores it in a Secure, HttpOnly, SameSite cookie. Subsequent browser requests
+go to `/api/backend/*`; the proxy attaches the bearer token when calling
+FastAPI. Do not restore bearer-token storage in localStorage.
 
 ## 5. Password auth endpoints
 
@@ -163,6 +177,7 @@ Seller and buyer accounts are separate by role. The same phone/email can exist o
 - Supabase service-role key stays only in Python backend.
 - Frontend uses Supabase anon key only for Google OAuth.
 - Backend validates Google access token using Supabase before creating an account row.
+- Logout revokes the server-side `app_sessions` row; copied logged-out tokens no longer remain valid.
 - New Google users complete `/seller/onboarding` or `/buyer/onboarding` before entering role-specific features.
 - Product, order, cart, and profile database access goes through FastAPI.
 - RLS remains enabled; no anonymous browser table policies are needed for this prototype.

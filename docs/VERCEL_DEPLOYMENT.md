@@ -20,6 +20,10 @@ build output are ignored.
 
 ## 2. Create the backend project first
 
+Before deploying the updated backend, run Supabase migrations `001` through
+`006` in filename order. The backend now depends on the `app_sessions` table
+and `place_buyer_order` database function from migration 006.
+
 1. Open the Vercel dashboard and select **Add New > Project**.
 2. Import the Viraasat AI GitHub repository.
 3. Name the project `viraasat-ai-api`.
@@ -34,6 +38,7 @@ SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_SECRET_KEY=YOUR_SERVER_SIDE_SUPABASE_SECRET
 APP_SESSION_SECRET=GENERATE_A_DIFFERENT_LONG_RANDOM_SECRET
 FRONTEND_ORIGINS=https://YOUR_FRONTEND_PROJECT.vercel.app
+AUTH_REQUESTS_PER_MINUTE=20
 
 AI_PROVIDER=ollama
 OLLAMA_API_KEY=YOUR_OLLAMA_CLOUD_KEY
@@ -97,6 +102,7 @@ The first route must report `ok`; the Supabase route must report `ready`.
 5. Add these Environment Variables:
 
 ```dotenv
+BACKEND_API_BASE_URL=https://viraasat-ai-api.vercel.app
 NEXT_PUBLIC_API_BASE_URL=https://viraasat-ai-api.vercel.app
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLIC_PUBLISHABLE_KEY
@@ -105,8 +111,10 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLIC_PUBLISHABLE_KEY
 Only the Supabase publishable key belongs in the frontend. Never use the
 Supabase secret/service-role key in a `NEXT_PUBLIC_` variable.
 
-Enter `NEXT_PUBLIC_API_BASE_URL` without a trailing slash. The frontend also
-normalizes it defensively so API paths never contain a double slash.
+`BACKEND_API_BASE_URL` is the server-only URL used by the Next.js same-origin
+proxy. `NEXT_PUBLIC_API_BASE_URL` remains as a compatibility fallback. Enter
+both without a trailing slash. The browser no longer stores the app bearer
+token or calls FastAPI directly.
 
 Deploy and copy the production frontend URL. If it differs from the value used
 for backend `FRONTEND_ORIGINS`, correct that backend variable and redeploy the
@@ -160,6 +168,9 @@ Test in this order:
   public launch, add a durable distributed rate limiter (for example, a
   Supabase/Postgres atomic counter or managed rate-limit store) or configure a
   Vercel Firewall rule for the AI endpoint.
+- Authentication has an application-level per-instance limit. Also configure a
+  Vercel Firewall rate-limit rule for `/api/auth/login`, `/api/auth/signup`, and
+  `/api/auth/google` so limits are shared across serverless instances.
 - Exact `FRONTEND_ORIGINS` is safest. Add preview URLs explicitly only when a
   preview must call the production API. `FRONTEND_ORIGIN_REGEX` exists for a
   deliberately scoped preview-domain regex, but should not be broad.

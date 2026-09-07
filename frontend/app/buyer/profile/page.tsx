@@ -11,6 +11,8 @@ export default function BuyerProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<BuyerProfile | null>(null);
   const [error, setError] = useState("");
+  const [logoutError, setLogoutError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     getCurrentBuyer()
@@ -19,8 +21,15 @@ export default function BuyerProfilePage() {
   }, []);
 
   async function logout() {
-    await logoutAccount();
-    router.push("/");
+    setSigningOut(true);
+    setLogoutError("");
+    try {
+      await logoutAccount();
+      router.replace("/");
+    } catch (requestError) {
+      setLogoutError(requestError instanceof Error ? requestError.message : "Secure sign-out could not be completed.");
+      setSigningOut(false);
+    }
   }
 
   if (error) {
@@ -43,6 +52,7 @@ export default function BuyerProfilePage() {
 
   return (
     <div className="app-shell">
+      {logoutError && <p className="mb-5 rounded-2xl bg-red-50 p-4 text-red-800" role="alert">{logoutError}</p>}
       <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
         <div className="app-card p-6">
           <span className="pill bg-[#e8f3ec] text-[#2d6a4f]">Buyer profile</span>
@@ -92,7 +102,7 @@ export default function BuyerProfilePage() {
               <Link className="primary-button bg-[#2d6a4f]" href="/buyer/marketplace">Continue shopping</Link>
               <Link className="secondary-button" href="/buyer/orders">View orders</Link>
               <Link className="secondary-button" href="/buyer/cart">Open cart</Link>
-              <button className="secondary-button" onClick={() => void logout()} type="button">Logout</button>
+              <button className="secondary-button" disabled={signingOut} onClick={() => void logout()} type="button">{signingOut ? "Signing out..." : "Logout"}</button>
             </div>
           </div>
         </div>

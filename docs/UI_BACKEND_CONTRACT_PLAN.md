@@ -280,7 +280,7 @@ UI sections:
 
 - Header with artisan greeting
 - Language badge
-- ONDC/demo status badge
+- ONDC connection status badge
 - Main CTA: "Digitize Your Craft"
 - Metrics cards
 - Recent products
@@ -1006,9 +1006,9 @@ UI sections:
 - Location
 - Preferred language
 - UPI/payment setting
-- ONDC/demo status
+- ONDC connection status
 - Help and support
-- Logout/demo reset
+- Logout and session revocation
 
 Frontend type:
 
@@ -1021,7 +1021,7 @@ type ArtisanProfile = {
   craft_type: string;
   preferred_language: string;
   upi_id?: string;
-  ondc_status: "not_connected" | "demo_ready" | "connected";
+  ondc_status: "not_connected" | "connected";
 };
 ```
 
@@ -1341,7 +1341,7 @@ location text not null
 craft_type text not null
 preferred_language text not null
 upi_id text
-ondc_status text default 'demo_ready'
+ondc_status text default 'not_connected'
 created_at timestamptz default now()
 updated_at timestamptz default now()
 ```

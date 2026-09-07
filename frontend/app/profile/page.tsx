@@ -9,14 +9,29 @@ import type { ArtisanProfile } from "@/lib/types";
 export default function ProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<ArtisanProfile | null>(null);
+  const [error, setError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
-    getCurrentArtisan().then(setProfile);
+    getCurrentArtisan()
+      .then(setProfile)
+      .catch((requestError) => setError(requestError instanceof Error ? requestError.message : "Could not load seller profile."));
   }, []);
 
   async function logout() {
-    await logoutAccount();
-    router.push("/");
+    setSigningOut(true);
+    setError("");
+    try {
+      await logoutAccount();
+      router.replace("/");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Secure sign-out could not be completed.");
+      setSigningOut(false);
+    }
+  }
+
+  if (error && !profile) {
+    return <div className="app-shell"><section className="app-card p-6 text-red-800" role="alert">{error}</section></div>;
   }
 
   if (!profile) {
@@ -29,6 +44,7 @@ export default function ProfilePage() {
 
   return (
     <div className="app-shell">
+      {error && <p className="mb-5 rounded-2xl bg-red-50 p-4 text-red-800" role="alert">{error}</p>}
       <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
         <div className="app-card p-6">
           <span className="pill bg-[#f4e9df] text-[#b84f28]">Seller profile</span>
@@ -62,7 +78,7 @@ export default function ProfilePage() {
           <div className="warm-card p-5">
             <h2 className="text-xl font-black">Settings</h2>
             <p className="mt-2 text-[#6d5145]">Sign out when this device should no longer access the seller workspace.</p>
-            <button className="secondary-button mt-5" onClick={logout} type="button">Logout</button>
+            <button className="secondary-button mt-5" disabled={signingOut} onClick={logout} type="button">{signingOut ? "Signing out..." : "Logout"}</button>
           </div>
         </div>
       </section>

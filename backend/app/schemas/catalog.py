@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 LanguageCode = Literal["en", "hi", "gu", "mr", "ta", "te", "kn", "bn", "pa", "unknown", "en-IN", "hi-IN", "gu-IN", "mr-IN", "ta-IN", "te-IN", "kn-IN", "bn-IN", "pa-IN"]
-AiProvider = Literal["mock", "openai", "ollama"]
+AiProvider = Literal["openai", "ollama"]
 
 
 class CatalogRequest(BaseModel):
@@ -68,7 +68,7 @@ class GeneratedListing(BaseModel):
     source_language: LanguageCode = "unknown"
     transcript: str = Field(default="", max_length=5000)
     translated_input: str = Field(default="", max_length=5000)
-    ai_provider: AiProvider = "mock"
+    ai_provider: AiProvider = "ollama"
     confidence: float = Field(default=0.65, ge=0, le=1)
     warnings: list[str] = Field(default_factory=list, max_length=20)
 

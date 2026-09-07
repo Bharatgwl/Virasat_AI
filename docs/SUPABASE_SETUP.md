@@ -18,11 +18,11 @@ For this prototype, use the dashboard SQL Editor:
 2. Open `supabase/migrations/001_initial.sql` on your computer, copy all of it into the query, and select **Run**.
 3. Create another query.
 4. Open `supabase/migrations/002_version_2_dashboard.sql`, copy all of it, and select **Run**.
-5. Create one more query, copy `supabase/migrations/003_multimodal_ai.sql`, and select **Run**.
-6. In **Table Editor**, confirm that `products` and `inquiries` exist.
+5. Continue with a new SQL query for each remaining migration: `003_multimodal_ai.sql`, `004_accounts_buyers_orders.sql`, `005_strict_role_separation.sql`, and `006_production_order_integrity.sql`.
+6. In **Table Editor**, confirm that `accounts`, `artisans`, `buyers`, `products`, `inquiries`, `cart_items`, `orders`, `order_items`, and `app_sessions` exist.
 7. In **Storage**, confirm that `product-images` and `product-audio` exist.
 
-Run migrations 001, 002, and 003 in that exact order. They are written to be safe to run again if a setup attempt is interrupted.
+Run migrations 001 through 006 in filename order. Migration 005 intentionally stops if old profiles or products have no owner; repair those rows before continuing so seller and buyer data are never mixed. Migration 006 adds revocable sessions and atomic, stock-safe, idempotent order creation.
 
 ## 3. Copy the two backend values
 
@@ -47,7 +47,9 @@ The local `backend/.env` file has already been prepared and is ignored by Git. A
 ```dotenv
 SUPABASE_URL=https://YOUR_PROJECT_REFERENCE.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_YOUR_REAL_SECRET_KEY
+APP_SESSION_SECRET=GENERATE_A_SEPARATE_LONG_RANDOM_SECRET
 FRONTEND_ORIGINS=http://localhost:3000
+ENVIRONMENT=development
 ```
 
 Save and close Notepad. Do not change `frontend/.env.local`; it should contain only:
@@ -66,8 +68,8 @@ Restart FastAPI after editing `.env`, then open:
 
 If the result is `setup_required`, FastAPI did not read `backend/.env`. Start Uvicorn while the terminal is inside the `backend` folder.
 
-If the result is `connection_failed`, check the project URL, secret key, and that both SQL migrations completed successfully.
+If the result is `connection_failed`, check the project URL, secret key, and that all six SQL migrations completed successfully.
 
 ## Later team workflow
 
-The two manual SQL runs above are suitable for the first prototype setup. When the team starts shared development and Git is ready, install the Supabase CLI, link the project, and deploy subsequent migration files with `supabase db push`. Only one designated team member should deploy remote migrations at a time.
+The manual SQL runs above are suitable for initial setup. When the team starts shared development, install the Supabase CLI, link the project, and deploy subsequent migration files with `supabase db push`. Only one designated team member should deploy remote migrations at a time.

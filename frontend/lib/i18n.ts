@@ -35,7 +35,9 @@ export type TranslationKey =
   | "voiceReady"
   | "voiceHint"
   | "continue"
-  | "checkingSession";
+  | "checkingSession"
+  | "sessionCheckFailed"
+  | "retry";
 
 const en: Record<TranslationKey, string> = {
   brandSubtitleHome: "Choose your role",
@@ -73,6 +75,8 @@ const en: Record<TranslationKey, string> = {
   voiceHint: "Speak naturally in your language; typing long product details is optional.",
   continue: "Continue",
   checkingSession: "Checking secure session...",
+  sessionCheckFailed: "Unable to verify your session",
+  retry: "Retry",
 };
 
 const hi: Record<TranslationKey, string> = {
@@ -107,6 +111,8 @@ const hi: Record<TranslationKey, string> = {
   selectLanguage: "अपनी भाषा चुनें", languageIntro: "वह भाषा चुनें जिसमें आप सहज हैं। ऐप इसे नेविगेशन, आवाज़ और लिस्टिंग समीक्षा के लिए याद रखेगा।",
   selectedLanguage: "चुनी गई भाषा", noneSelected: "कोई भाषा नहीं चुनी", voiceReady: "वॉइस सहायक तैयार है", voiceHint: "अपनी भाषा में स्वाभाविक रूप से बोलें; लंबे विवरण टाइप करना वैकल्पिक है।", continue: "आगे बढ़ें",
   checkingSession: "सुरक्षित सत्र जांचा जा रहा है...",
+  sessionCheckFailed: "आपका सत्र सत्यापित नहीं हो सका",
+  retry: "फिर प्रयास करें",
 };
 
 const gu: Record<TranslationKey, string> = {

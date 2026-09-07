@@ -1,5 +1,4 @@
 import type { ArtisanProfile, LanguageCode } from "@/lib/types";
-import { clearSessionToken } from "@/lib/api-client";
 
 const languageKey = "viraasat_language";
 const profileKey = "viraasat_artisan_profile";
@@ -49,7 +48,7 @@ export function clearLocalSession() {
   window.localStorage.removeItem(profileKey);
   window.localStorage.removeItem("viraasat_buyer_profile");
   window.localStorage.removeItem("viraasat_active_account");
-  clearSessionToken();
+  window.localStorage.removeItem("viraasat_auth_token");
 }
 
 export function isLanguageCode(value: unknown): value is LanguageCode {

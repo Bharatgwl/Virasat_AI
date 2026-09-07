@@ -29,8 +29,9 @@ def test_shared_product_routes_are_not_exposed() -> None:
 def test_buyer_token_is_denied_from_seller_api(monkeypatch) -> None:
     account_id = uuid4()
     account = Account(id=account_id, role="buyer", display_name="Buyer User")
-    token = account_service._session_for(account.model_dump(mode="json")).access_token
+    token = account_service._session_for(account.model_dump(mode="json"), register=False).access_token
     monkeypatch.setattr(account_service, "get_account", lambda _account_id: account)
+    monkeypatch.setattr(account_service, "_session_is_active", lambda _session_id, _account_id: True)
 
     response = client.get("/api/seller/products", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403
@@ -40,8 +41,9 @@ def test_buyer_token_is_denied_from_seller_api(monkeypatch) -> None:
 def test_seller_token_is_denied_from_buyer_api(monkeypatch) -> None:
     account_id = uuid4()
     account = Account(id=account_id, role="seller", display_name="Seller User")
-    token = account_service._session_for(account.model_dump(mode="json")).access_token
+    token = account_service._session_for(account.model_dump(mode="json"), register=False).access_token
     monkeypatch.setattr(account_service, "get_account", lambda _account_id: account)
+    monkeypatch.setattr(account_service, "_session_is_active", lambda _session_id, _account_id: True)
 
     response = client.get("/api/buyer/products", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 403

@@ -1,12 +1,7 @@
-const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
-).replace(/\/+$/, "");
-
 function apiUrl(path: string) {
-  return `${API_BASE_URL}/${path.replace(/^\/+/, "")}`;
+  const normalized = path.replace(/^\/?api\/?/, "");
+  return `/api/backend/${normalized}`;
 }
-
-const sessionTokenKey = "viraasat_auth_token";
 
 type ApiErrorBody = {
   error?: {
@@ -40,16 +35,12 @@ export async function apiRequest<T>(
   if (options.body && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(sessionTokenKey);
-    if (token && !headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
 
   const response = await fetch(apiUrl(path), {
     ...options,
     headers,
+    credentials: "same-origin",
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -66,20 +57,6 @@ export async function apiRequest<T>(
   }
 
   return (await response.json()) as T;
-}
-
-export function getSessionToken() {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(sessionTokenKey);
-}
-
-export function setSessionToken(token: string) {
-  window.localStorage.setItem(sessionTokenKey, token);
-}
-
-export function clearSessionToken() {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(sessionTokenKey);
 }
 
 export async function uploadFile(

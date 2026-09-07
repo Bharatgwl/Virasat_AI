@@ -3,7 +3,10 @@ import hashlib
 import hmac
 import json
 import time
-from uuid import UUID
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
+
+from postgrest.exceptions import APIError
 
 from app.core.config import get_settings
 from app.core.errors import AppError
@@ -12,25 +15,43 @@ from app.schemas.account import Account, AccountLogin, AccountSession, AccountSi
 from app.services.supabase_client import get_supabase
 
 
-def _session_for(account: dict, token_type: str = "app") -> AccountSession:
+def _session_for(account: dict, token_type: str = "app", *, register: bool = True) -> AccountSession:
+    session_id = uuid4()
+    expires_at = int(time.time()) + (7 * 24 * 60 * 60)
     payload = {
         "sub": str(account["id"]),
         "role": account["role"],
-        "exp": int(time.time()) + (7 * 24 * 60 * 60),
+        "sid": str(session_id),
+        "exp": expires_at,
     }
     encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
     signature = hmac.new(get_settings().session_signing_key.encode(), encoded.encode(), hashlib.sha256).digest()
     signed_token = f"v1.{encoded}.{base64.urlsafe_b64encode(signature).decode().rstrip('=')}"
-    return AccountSession(
+    session = AccountSession(
         account=Account.model_validate(account),
         token_type=token_type,  # type: ignore[arg-type]
         access_token=signed_token,
     )
+    if register:
+        try:
+            get_supabase().table("app_sessions").insert(
+                {
+                    "id": str(session_id),
+                    "account_id": str(account["id"]),
+                    "expires_at": datetime.fromtimestamp(expires_at, UTC).isoformat(),
+                }
+            ).execute()
+        except APIError as exc:
+            raise AppError(
+                "SESSION_CREATE_FAILED",
+                "A secure session could not be created. Please try signing in again.",
+                503,
+                True,
+            ) from exc
+    return session
 
 
-def account_from_session_token(token: str | None) -> Account | None:
-    if not token:
-        return None
+def _decode_session_token(token: str) -> dict | None:
     try:
         version, encoded, provided_signature = token.split(".", maxsplit=2)
         if version != "v1":
@@ -42,17 +63,66 @@ def account_from_session_token(token: str | None) -> Account | None:
         payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
         if int(payload["exp"]) <= int(time.time()):
             return None
+        UUID(payload["sub"])
+        UUID(payload["sid"])
+        return payload
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def _session_is_active(session_id: str, account_id: str) -> bool:
+    try:
+        response = (
+            get_supabase().table("app_sessions").select("id")
+            .eq("id", session_id).eq("account_id", account_id)
+            .is_("revoked_at", "null").limit(1).execute()
+        )
+    except APIError as exc:
+        raise AppError("SESSION_STORE_UNAVAILABLE", "The session service is temporarily unavailable.", 503, True) from exc
+    return bool(response.data)
+
+
+def account_from_session_token(token: str | None) -> Account | None:
+    if not token:
+        return None
+    try:
+        payload = _decode_session_token(token)
+        if not payload or not _session_is_active(payload["sid"], payload["sub"]):
+            return None
         account = get_account(UUID(payload["sub"]))
         return account if account.role == payload["role"] else None
-    except (ValueError, KeyError, TypeError, json.JSONDecodeError, AppError):
+    except AppError as exc:
+        if exc.code == "ACCOUNT_NOT_FOUND":
+            return None
+        raise
+    except (ValueError, KeyError, TypeError):
         return None
+
+
+def revoke_session_token(token: str) -> None:
+    payload = _decode_session_token(token)
+    if not payload:
+        return
+    try:
+        (
+            get_supabase().table("app_sessions")
+            .update({"revoked_at": datetime.now(UTC).isoformat()})
+            .eq("id", payload["sid"]).eq("account_id", payload["sub"]).execute()
+        )
+    except APIError as exc:
+        raise AppError("SESSION_REVOKE_FAILED", "Sign-out could not be completed securely.", 503, True) from exc
 
 
 def create_account(request: AccountSignup) -> AccountSession:
     payload = request.model_dump(exclude={"password"}, mode="json")
     payload["password_hash"] = hash_password(request.password)
     payload["auth_provider"] = "password"
-    response = get_supabase().table("accounts").insert(payload).execute()
+    try:
+        response = get_supabase().table("accounts").insert(payload).execute()
+    except APIError as exc:
+        if exc.code == "23505":
+            raise AppError("ACCOUNT_EXISTS", "An account already exists for this role and contact.", 409) from exc
+        raise AppError("ACCOUNT_CREATE_FAILED", "The account could not be created.", 500, True) from exc
     if not response.data:
         raise AppError("ACCOUNT_CREATE_FAILED", "The account could not be created.", 500, True)
     return _session_for(response.data[0])
@@ -123,7 +193,12 @@ def authenticate_google(request: GoogleAuthRequest) -> AccountSession:
         "password_hash": "",
         "auth_provider": "google",
     }
-    created = get_supabase().table("accounts").insert(payload).execute()
+    try:
+        created = get_supabase().table("accounts").insert(payload).execute()
+    except APIError as exc:
+        if exc.code == "23505":
+            raise AppError("ACCOUNT_EXISTS", "A Google account already exists for this role.", 409) from exc
+        raise AppError("GOOGLE_ACCOUNT_CREATE_FAILED", "Google account could not be created.", 500, True) from exc
     if not created.data:
         raise AppError("GOOGLE_ACCOUNT_CREATE_FAILED", "Google account could not be created.", 500, True)
     return _session_for(created.data[0], "supabase")

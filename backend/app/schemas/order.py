@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 
-PaymentMode = Literal["upi", "cod", "demo"]
+PaymentMode = Literal["upi", "cod", "unpaid"]
 OrderStatus = Literal["placed", "confirmed", "packed", "shipped", "delivered", "cancelled"]
 
 
@@ -30,7 +30,8 @@ class OrderCreate(BaseModel):
     buyer_id: UUID
     items: list[CartItemCreate] = Field(min_length=1, max_length=100)
     delivery_address: str = Field(min_length=5, max_length=500)
-    payment_mode: PaymentMode = "demo"
+    payment_mode: Literal["upi", "cod"] = "cod"
+    idempotency_key: UUID
 
 
 class OrderItem(BaseModel):
@@ -53,7 +54,7 @@ class Order(BaseModel):
     items: list[OrderItem] = []
     total_inr: int = Field(ge=0)
     status: OrderStatus = "placed"
-    payment_mode: PaymentMode = "demo"
+    payment_mode: PaymentMode = "unpaid"
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

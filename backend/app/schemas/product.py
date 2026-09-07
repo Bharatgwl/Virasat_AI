@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 
 ProductStatus = Literal["draft", "generated", "ready", "published"]
-AiProvider = Literal["mock", "openai", "ollama"]
+AiProvider = Literal["legacy", "openai", "ollama"]
 
 
 class ProductCreate(BaseModel):
@@ -21,7 +21,7 @@ class ProductCreate(BaseModel):
     image_url: HttpUrl
     audio_url: str | None = Field(default=None, max_length=1000)
     source_language_code: str = Field(default="en", max_length=20)
-    ai_provider: AiProvider = "mock"
+    ai_provider: AiProvider = "ollama"
     craft_title: str | None = Field(default=None, min_length=3, max_length=180)
     craft_story: str | None = Field(default=None, min_length=10, max_length=3000)
     primary_material: str | None = Field(default=None, min_length=2, max_length=120)

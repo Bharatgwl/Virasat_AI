@@ -80,6 +80,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(
     () => Boolean(requiredRole(pathname) || isAuthRoute(pathname)),
   );
+  const [authError, setAuthError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -95,6 +97,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
 
     async function checkAuth() {
+      setAuthError("");
       const cached = getActiveAccount();
       const routeRole = requiredRole(pathname);
       const authRoute = isAuthRoute(pathname);
@@ -143,9 +146,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       let account: Account | null;
       try {
         account = await refreshAccount();
-      } catch {
-        // Temporary backend failures should render an error, never start a redirect loop.
-        showPage();
+      } catch (requestError) {
+        if (alive) {
+          setChecking(false);
+          setAuthError(requestError instanceof Error ? requestError.message : t("sessionCheckFailed"));
+        }
         return;
       }
 
@@ -204,7 +209,21 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [pathname, router]);
+  }, [pathname, retryKey, router, t]);
+
+  if (authError) {
+    return (
+      <main className="app-shell">
+        <section className="app-card p-6" role="alert">
+          <h1 className="text-xl font-black text-[#211814]">{t("sessionCheckFailed")}</h1>
+          <p className="mt-2 text-[#6d5145]">{authError}</p>
+          <button className="primary-button mt-5" onClick={() => { setChecking(true); setRetryKey((value) => value + 1); }} type="button">
+            {t("retry")}
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   if (checking) {
     return (

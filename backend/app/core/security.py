@@ -9,8 +9,8 @@ from app.core.errors import AppError
 
 
 def hash_password(password: str) -> str:
-    if len(password) < 6:
-        raise AppError("WEAK_PASSWORD", "Password must be at least 6 characters.")
+    if len(password) < 8:
+        raise AppError("WEAK_PASSWORD", "Password must be at least 8 characters.")
     salt = os.urandom(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 210_000)
     return "pbkdf2_sha256$210000$" + base64.b64encode(salt).decode() + "$" + base64.b64encode(digest).decode()

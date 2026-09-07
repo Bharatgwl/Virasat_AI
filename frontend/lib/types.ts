@@ -25,7 +25,7 @@ export type ArtisanProfile = {
   craft_type: string;
   preferred_language: LanguageCode;
   upi_id?: string;
-  ondc_status: "not_connected" | "demo_ready" | "connected";
+  ondc_status: "not_connected" | "connected";
 };
 
 export type CatalogGenerationInput = {
@@ -94,7 +94,7 @@ export type Product = {
   image_url: string;
   audio_url?: string | null;
   source_language_code?: string;
-  ai_provider?: AiProvider;
+  ai_provider?: AiProvider | "legacy";
   status: ProductStatus;
   craft_title?: string;
   craft_story?: string;
@@ -208,6 +208,6 @@ export type Order = {
   items: OrderItem[];
   total_inr: number;
   status: OrderStatus;
-  payment_mode: "upi" | "cod";
+  payment_mode: "upi" | "cod" | "unpaid";
   created_at?: string | null;
 };

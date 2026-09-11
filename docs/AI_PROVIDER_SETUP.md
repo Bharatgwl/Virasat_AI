@@ -30,6 +30,11 @@ OLLAMA_MODEL=gemma4:31b
 OLLAMA_BASE_URL=https://ollama.com/api
 ```
 
+For the direct hosted API, use a model name returned by
+`https://ollama.com/api/tags`. Do not invent a model size/name and do not append
+the local CLI's `-cloud` suffix. For example, use `gemma4:31b`, not
+`gemma4:31b-cloud`.
+
 The model is configurable because Ollama's cloud catalogue changes. `gemma3:27b` was
 retired by Ollama Cloud on July 15, 2026; do not use that older value. Choose a currently
 available model marked both **Cloud** and **Vision**. This project validates the model's JSON in Python because

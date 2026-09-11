@@ -1,8 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { type DragEvent, type FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { generateListing, getProviderStatus, MAX_AI_AUDIO_BYTES, MAX_AI_IMAGE_BYTES } from "@/lib/services/ai";
+import {
+  generateListing,
+  getProviderStatus,
+  MAX_AI_AUDIO_BYTES,
+  MAX_AI_AUDIO_DURATION_SECONDS,
+  MAX_AI_IMAGE_BYTES,
+} from "@/lib/services/ai";
 import { languageOptions } from "@/lib/services/language";
 import { getCurrentArtisan } from "@/lib/services/artisans";
 import { isApiRequestError, uploadFile } from "@/lib/api-client";
@@ -23,14 +29,52 @@ const RECORDER_MIME_TYPES = [
   "audio/mp4",
   "audio/ogg;codecs=opus",
 ] as const;
+const UPLOAD_AUDIO_TYPES = new Set([
+  "audio/webm",
+  "audio/ogg",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/wave",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/m4a",
+  "audio/aac",
+  "audio/x-aac",
+]);
+const AUDIO_ACCEPT = ".webm,.ogg,.mp3,.wav,.m4a,.mp4,.aac,audio/webm,audio/ogg,audio/mpeg,audio/wav,audio/mp4,audio/aac";
 
 function recorderOptions(): MediaRecorderOptions | undefined {
   const mimeType = RECORDER_MIME_TYPES.find((candidate) => MediaRecorder.isTypeSupported(candidate));
   return mimeType ? { mimeType } : undefined;
 }
 
-function audioFileFromBlob(blob: Blob): File {
-  const mimeType = blob.type.split(";", 1)[0].toLowerCase() || "audio/webm";
+function normalizedAudioMimeType(blob: Blob, filename = "") {
+  const supplied = blob.type.split(";", 1)[0].toLowerCase();
+  if (supplied === "audio/mp3") return "audio/mpeg";
+  if (["audio/m4a", "audio/x-m4a"].includes(supplied)) return "audio/mp4";
+  if (["audio/x-aac"].includes(supplied)) return "audio/aac";
+  if (["audio/x-wav", "audio/wave"].includes(supplied)) return "audio/wav";
+  if (supplied) return supplied;
+  const extension = filename.toLowerCase().split(".").pop();
+  return extension === "m4a" || extension === "mp4"
+    ? "audio/mp4"
+    : extension === "mp3"
+      ? "audio/mpeg"
+      : extension === "wav"
+        ? "audio/wav"
+        : extension === "ogg"
+          ? "audio/ogg"
+          : extension === "aac"
+            ? "audio/aac"
+            : extension === "webm"
+              ? "audio/webm"
+              : "";
+}
+
+function audioFileFromBlob(blob: Blob, originalName = ""): File {
+  const mimeType = normalizedAudioMimeType(blob, originalName) || "audio/webm";
   const extension = mimeType === "audio/mp4" || mimeType === "audio/x-m4a"
     ? "m4a"
     : mimeType === "audio/ogg"
@@ -40,7 +84,41 @@ function audioFileFromBlob(blob: Blob): File {
         : mimeType === "audio/aac" || mimeType === "audio/x-aac"
           ? "aac"
           : "webm";
-  return new File([blob], `artisan-voice-note.${extension}`, { type: mimeType });
+  const name = originalName || `artisan-voice-note.${extension}`;
+  return new File([blob], name, { type: mimeType });
+}
+
+function readAudioDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement("audio");
+    const cleanup = () => {
+      audio.onloadedmetadata = null;
+      audio.onerror = null;
+      audio.removeAttribute("src");
+      audio.load();
+      URL.revokeObjectURL(url);
+    };
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Audio metadata could not be read."));
+    }, 10_000);
+
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      window.clearTimeout(timeout);
+      const duration = audio.duration;
+      cleanup();
+      if (Number.isFinite(duration) && duration > 0) resolve(duration);
+      else reject(new Error("Audio duration is invalid."));
+    };
+    audio.onerror = () => {
+      window.clearTimeout(timeout);
+      cleanup();
+      reject(new Error("Audio file could not be read."));
+    };
+    audio.src = url;
+  });
 }
 
 export default function AddProductPage() {
@@ -51,7 +129,10 @@ export default function AddProductPage() {
   const [aiProvider, setAiProvider] = useState<AiProvider>("ollama");
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioSource, setAudioSource] = useState<"recorded" | "uploaded" | null>(null);
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [draggingAudio, setDraggingAudio] = useState(false);
   const [typedHint, setTypedHint] = useState("");
   const [listing, setListing] = useState<GeneratedListing | null>(null);
   const [recording, setRecording] = useState(false);
@@ -61,6 +142,8 @@ export default function AddProductPage() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     getCurrentArtisan().then((profile) => {
@@ -97,31 +180,50 @@ export default function AddProductPage() {
 
   async function startRecording() {
     setError("");
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const activeStream = stream;
       const options = recorderOptions();
-      const recorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
+      const recorder = options ? new MediaRecorder(activeStream, options) : new MediaRecorder(activeStream);
       chunksRef.current = [];
-      setAudioBlob(null);
+      setAudioFile(null);
+      setAudioSource(null);
+      setAudioDuration(null);
+      if (audioInputRef.current) audioInputRef.current.value = "";
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
         if (timerRef.current) clearTimeout(timerRef.current);
         const recordingBlob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        if (recordingBlob.size > MAX_AI_AUDIO_BYTES) {
-          setAudioBlob(null);
+        const elapsedSeconds = recordingStartedAtRef.current
+          ? Math.max(0.1, (Date.now() - recordingStartedAtRef.current) / 1000)
+          : 0;
+        recordingStartedAtRef.current = null;
+        if (!recordingBlob.size) {
+          setAudioFile(null);
+          setError("No voice was captured. Please record again.");
+        } else if (recordingBlob.size > MAX_AI_AUDIO_BYTES) {
+          setAudioFile(null);
           setError("The voice note is too large. Please record a shorter note.");
+        } else if (elapsedSeconds >= MAX_AI_AUDIO_DURATION_SECONDS) {
+          setAudioFile(null);
+          setError("The voice note must be shorter than 30 seconds. Please record again.");
         } else {
-          setAudioBlob(recordingBlob);
+          setAudioFile(audioFileFromBlob(recordingBlob));
+          setAudioSource("recorded");
+          setAudioDuration(elapsedSeconds);
         }
-        stream.getTracks().forEach((track) => track.stop());
+        activeStream.getTracks().forEach((track) => track.stop());
       };
       recorder.start();
+      recordingStartedAtRef.current = Date.now();
       recorderRef.current = recorder;
       setRecording(true);
       timerRef.current = setTimeout(() => stopRecording(), 29_000);
     } catch {
+      stream?.getTracks().forEach((track) => track.stop());
       setError("Microphone access was not available. You can type a short hint instead.");
     }
   }
@@ -132,6 +234,67 @@ export default function AddProductPage() {
     setRecording(false);
   }
 
+  function clearVoice() {
+    setAudioFile(null);
+    setAudioSource(null);
+    setAudioDuration(null);
+    if (audioInputRef.current) audioInputRef.current.value = "";
+  }
+
+  async function chooseUploadedVoice(file: File | null) {
+    setDraggingAudio(false);
+    setError("");
+    if (!file) return;
+    if (recording) {
+      setError("Stop the current recording before uploading a voice note.");
+      return;
+    }
+
+    const mimeType = normalizedAudioMimeType(file, file.name);
+    if (!mimeType || !UPLOAD_AUDIO_TYPES.has(mimeType)) {
+      clearVoice();
+      setError("Upload a WebM, OGG, MP3, WAV, M4A, MP4, or AAC voice note.");
+      return;
+    }
+    if (!file.size) {
+      clearVoice();
+      setError("The selected voice file is empty.");
+      return;
+    }
+    if (file.size > MAX_AI_AUDIO_BYTES) {
+      clearVoice();
+      setError(`The voice file must be ${Math.floor(MAX_AI_AUDIO_BYTES / 1000)} KB or smaller.`);
+      return;
+    }
+
+    const normalizedFile = audioFileFromBlob(file, file.name);
+    try {
+      const duration = await readAudioDuration(normalizedFile);
+      if (duration >= MAX_AI_AUDIO_DURATION_SECONDS) {
+        clearVoice();
+        setError("The prerecorded voice note must be shorter than 30 seconds.");
+        return;
+      }
+      setAudioFile(normalizedFile);
+      setAudioSource("uploaded");
+      setAudioDuration(duration);
+      setListing(null);
+    } catch {
+      clearVoice();
+      setError("The selected audio could not be verified. Choose another supported voice file.");
+    }
+  }
+
+  function dropUploadedVoice(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    if (recording || busy) {
+      setDraggingAudio(false);
+      setError(recording ? "Stop the current recording before uploading a voice note." : "Wait for the current request to finish.");
+      return;
+    }
+    void chooseUploadedVoice(event.dataTransfer.files?.[0] ?? null);
+  }
+
   async function submitForGeneration(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -139,7 +302,7 @@ export default function AddProductPage() {
       setError("Product image is required.");
       return;
     }
-    if (!audioBlob && typedHint.trim().length < 2) {
+    if (!audioFile && typedHint.trim().length < 2) {
       setError("Add a voice note or a small typed hint.");
       return;
     }
@@ -148,13 +311,12 @@ export default function AddProductPage() {
       return;
     }
 
-    const audioFile = audioBlob ? audioFileFromBlob(audioBlob) : undefined;
-
     setBusy(true);
     try {
       const generated = await generateListing({
         image_file: image,
-        audio_file: audioFile,
+        audio_file: audioFile ?? undefined,
+        audio_duration_seconds: audioDuration ?? undefined,
         typed_hint: typedHint,
         source_language: sourceLanguage,
         ai_provider: aiProvider,
@@ -182,7 +344,6 @@ export default function AddProductPage() {
     setError("");
     try {
       const imageUpload = await uploadFile("image", image);
-      const audioFile = audioBlob ? audioFileFromBlob(audioBlob) : null;
       const audioUpload = audioFile ? await uploadFile("audio", audioFile) : null;
       const product = await createProductFromListing({
         listing,
@@ -253,16 +414,61 @@ export default function AddProductPage() {
           )}
 
           <div className="rounded-2xl border border-dashed border-[#d8c2b3] p-4">
-            <p className="font-bold">Voice note strongly recommended</p>
-            <p className="mt-1 text-sm text-[#6d5145]">Ask the artisan to say material, use, technique, location, and story. Recording auto-stops before 30 seconds.</p>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              {!recording ? (
-                <button className="secondary-button" onClick={startRecording} type="button">Start voice</button>
-              ) : (
-                <button className="primary-button bg-red-700" onClick={stopRecording} type="button">Stop voice</button>
-              )}
-              {audioBlob && <span className="pill bg-[#e8f3ec] text-[#2d6a4f]">Voice ready</span>}
+            <p className="font-bold">Add one voice note</p>
+            <p className="mt-1 text-sm text-[#6d5145]">
+              Record now or upload one prerecorded file. Use only one option at a time; choosing another replaces the current voice note.
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className={`rounded-2xl border p-4 ${audioSource === "recorded" ? "border-[#2d6a4f] bg-[#f1f8f3]" : "border-[#eadbcf] bg-white"}`}>
+                <p className="font-bold">Record now</p>
+                <p className="mt-1 text-xs text-[#6d5145]">Speak about material, use, technique, location, and story.</p>
+                {!recording ? (
+                  <button className="secondary-button mt-4" disabled={busy} onClick={() => void startRecording()} type="button">
+                    {audioSource === "uploaded" ? "Replace with recording" : "Start voice"}
+                  </button>
+                ) : (
+                  <button className="primary-button mt-4 bg-red-700" onClick={stopRecording} type="button">Stop voice</button>
+                )}
+              </div>
+
+              <label
+                className={`cursor-pointer rounded-2xl border border-dashed p-4 transition ${
+                  draggingAudio ? "border-[#b84f28] bg-[#fff3ec]" : audioSource === "uploaded" ? "border-[#2d6a4f] bg-[#f1f8f3]" : "border-[#d8c2b3] bg-white"
+                } ${recording || busy ? "cursor-not-allowed opacity-60" : ""}`}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  if (!recording && !busy) setDraggingAudio(true);
+                }}
+                onDragLeave={() => setDraggingAudio(false)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={dropUploadedVoice}
+              >
+                <span className="block font-bold">Upload prerecorded voice</span>
+                <span className="mt-1 block text-xs text-[#6d5145]">Drop audio here or select a file. Maximum 750 KB and shorter than 30 seconds.</span>
+                <span className="secondary-button mt-4 inline-flex">Choose audio</span>
+                <input
+                  accept={AUDIO_ACCEPT}
+                  className="sr-only"
+                  disabled={recording || busy}
+                  onChange={(event) => void chooseUploadedVoice(event.target.files?.[0] ?? null)}
+                  ref={audioInputRef}
+                  type="file"
+                />
+              </label>
             </div>
+
+            {audioFile && audioSource && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#e8f3ec] p-3 text-sm text-[#285c45]">
+                <div>
+                  <p className="font-bold">{audioSource === "recorded" ? "Recorded voice ready" : "Uploaded voice ready"}</p>
+                  <p className="mt-0.5 break-all text-xs">
+                    {audioFile.name} · {audioDuration?.toFixed(1)} seconds · {Math.ceil(audioFile.size / 1000)} KB
+                  </p>
+                </div>
+                <button className="secondary-button" disabled={busy} onClick={clearVoice} type="button">Remove</button>
+              </div>
+            )}
           </div>
 
           <label>

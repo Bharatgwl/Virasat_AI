@@ -19,6 +19,25 @@ class OllamaCatalogProvider:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
+    @property
+    def base_url(self) -> str:
+        base_url = self.settings.ollama_base_url.rstrip("/")
+        if base_url.lower() in {"https://ollama.com", "https://www.ollama.com"}:
+            return f"{base_url}/api"
+        if base_url.lower().endswith("/api/chat"):
+            return base_url[:-5]
+        return base_url
+
+    @property
+    def model(self) -> str:
+        model = self.settings.ollama_model.strip()
+        # Ollama's local CLI uses names such as `gemma4:31b-cloud`, while the
+        # direct https://ollama.com/api host exposes the same model without the
+        # `-cloud` suffix.
+        if not self.settings.ollama_is_local and model.endswith("-cloud"):
+            return model.removesuffix("-cloud")
+        return model
+
     async def generate(self, request: CatalogGenerationInput) -> CatalogModelOutput:
         if not self.settings.ollama_api_key and not self.settings.ollama_is_local:
             raise AppError("AI_PROVIDER_NOT_CONFIGURED", "Ollama Cloud is not configured on the backend.", 503)
@@ -31,7 +50,7 @@ class OllamaCatalogProvider:
             f"{build_user_prompt(request)}\n\nReturn JSON only. It must follow this JSON Schema:\n{schema}"
         )
         payload = {
-            "model": self.settings.ollama_model,
+            "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
@@ -43,7 +62,7 @@ class OllamaCatalogProvider:
             "stream": False,
             "options": {"temperature": 0.1, "num_predict": 1200},
         }
-        endpoint = f"{self.settings.ollama_base_url.rstrip('/')}/chat"
+        endpoint = f"{self.base_url}/chat"
         try:
             async with httpx.AsyncClient(timeout=self.settings.ai_timeout_seconds) as client:
                 response = await client.post(endpoint, headers=headers, json=payload)
@@ -94,7 +113,7 @@ class OllamaCatalogProvider:
         logger.warning(
             "Ollama request rejected: status=%s model=%s endpoint_host=%s",
             status,
-            self.settings.ollama_model,
+            self.model,
             response.request.url.host if response.request else "unknown",
         )
         if status in {401, 403}:
@@ -106,7 +125,7 @@ class OllamaCatalogProvider:
         if status == 404:
             raise AppError(
                 "AI_MODEL_NOT_AVAILABLE",
-                f"Ollama model '{self.settings.ollama_model}' is unavailable or retired. Update OLLAMA_MODEL to an available vision model.",
+                f"Ollama model '{self.model}' was not found at the configured endpoint. For Ollama Cloud use OLLAMA_BASE_URL=https://ollama.com/api and a direct-API vision model such as gemma4:31b.",
                 503,
             )
         if status == 429:
@@ -120,7 +139,7 @@ class OllamaCatalogProvider:
         if status in {400, 422}:
             raise AppError(
                 "AI_PROVIDER_REQUEST_REJECTED",
-                f"Ollama rejected the image request for model '{self.settings.ollama_model}'. Verify that it is an available vision model.",
+                f"Ollama rejected the image request for model '{self.model}'. Verify that it is an available direct-API vision model.",
                 502,
             )
         if status >= 500:

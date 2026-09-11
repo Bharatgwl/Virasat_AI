@@ -48,6 +48,7 @@ async def generate_catalog(
     description: str = Form(default="", max_length=2000),
     language_code: str = Form(default="unknown", max_length=20),
     provider: str | None = Form(default=None, max_length=30),
+    audio_duration_seconds: float | None = Form(default=None, gt=0, le=30),
     image: UploadFile = File(...),
     audio: UploadFile | None = File(default=None),
     _account: Account = Depends(current_seller),
@@ -72,10 +73,12 @@ async def generate_catalog(
         if audio_type not in AUDIO_TYPES:
             raise AppError("UNSUPPORTED_AUDIO", "Use a WebM, OGG, MP3, WAV, M4A, or AAC recording.")
         audio_bytes = await audio.read(settings.ai_max_audio_bytes + 1)
+        if not audio_bytes:
+            raise AppError("EMPTY_AUDIO", "The voice recording is empty. Record or upload it again.")
         if len(audio_bytes) > settings.ai_max_audio_bytes:
             raise AppError("AUDIO_TOO_LARGE", "The recording is too large. Record a voice note under 30 seconds.")
         audio_name = audio.filename or audio_name
-
+        
     ai_provider = get_catalog_provider(provider)
     fingerprint_hasher = hashlib.sha256()
     for part in [str(_account.id).encode(), ai_provider.name.encode(), artisan_name.encode(), description.encode(), language_code.encode(), image_bytes, audio_bytes or b""]:
@@ -132,5 +135,4 @@ async def generate_catalog(
         fingerprint=fingerprint,
         operation=generate,
     )
-
 

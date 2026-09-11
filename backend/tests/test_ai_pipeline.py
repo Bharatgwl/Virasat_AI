@@ -101,6 +101,49 @@ def test_oversized_ai_request_is_rejected_before_multipart_processing() -> None:
     assert response.json()["error"]["code"] == "AI_REQUEST_TOO_LARGE"
 
 
+def test_prerecorded_audio_duration_over_limit_is_rejected() -> None:
+    app.dependency_overrides[current_seller] = lambda: Account(
+        id="9bededb1-fba2-4a34-9780-aa39418a084d", role="seller", display_name="Rani Devi"
+    )
+    response = client.post(
+        "/api/seller/snaplist/generate",
+        data={
+            "artisan_name": "Rani Devi",
+            "description": "Clay pot",
+            "audio_duration_seconds": "30.5",
+        },
+        files={
+            "image": ("product.png", b"example-image", "image/png"),
+            "audio": ("voice.m4a", b"example-audio", "audio/mp4"),
+        },
+    )
+
+    app.dependency_overrides.clear()
+    assert response.status_code == 422
+
+
+def test_empty_prerecorded_audio_is_rejected() -> None:
+    app.dependency_overrides[current_seller] = lambda: Account(
+        id="9bededb1-fba2-4a34-9780-aa39418a084d", role="seller", display_name="Rani Devi"
+    )
+    response = client.post(
+        "/api/seller/snaplist/generate",
+        data={
+            "artisan_name": "Rani Devi",
+            "description": "Clay pot",
+            "audio_duration_seconds": "10",
+        },
+        files={
+            "image": ("product.png", b"example-image", "image/png"),
+            "audio": ("voice.m4a", b"", "audio/mp4"),
+        },
+    )
+
+    app.dependency_overrides.clear()
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "EMPTY_AUDIO"
+
+
 def test_ollama_json_parser_accepts_code_fence() -> None:
     result = parse_catalog_json(
         """```json
@@ -152,6 +195,36 @@ def get_settings_for_ollama_test():
         ollama_api_key="test-key",
         ollama_model="gemma4:31b",
     )
+
+
+def test_ollama_direct_cloud_configuration_is_normalized() -> None:
+    from app.core.config import Settings
+
+    provider = OllamaCatalogProvider(
+        Settings(
+            _env_file=None,
+            ollama_api_key="test-key",
+            ollama_base_url="https://ollama.com",
+            ollama_model="gemma4:31b-cloud",
+        )
+    )
+
+    assert provider.base_url == "https://ollama.com/api"
+    assert provider.model == "gemma4:31b"
+
+
+def test_ollama_chat_url_is_not_duplicated() -> None:
+    from app.core.config import Settings
+
+    provider = OllamaCatalogProvider(
+        Settings(
+            _env_file=None,
+            ollama_api_key="test-key",
+            ollama_base_url="https://ollama.com/api/chat",
+        )
+    )
+
+    assert provider.base_url == "https://ollama.com/api"
 
 
 @pytest.mark.parametrize(

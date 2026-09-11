@@ -5,6 +5,7 @@ import type { CatalogGenerationInput, GeneratedListing, ProviderStatus } from "@
 // multipart metadata and the other text fields in the generation request.
 export const MAX_AI_IMAGE_BYTES = 3_000_000;
 export const MAX_AI_AUDIO_BYTES = 750_000;
+export const MAX_AI_AUDIO_DURATION_SECONDS = 30;
 const MAX_AI_MEDIA_BYTES = 3_750_000;
 
 export async function getProviderStatus(): Promise<ProviderStatus> {
@@ -26,6 +27,9 @@ export async function generateListing(input: CatalogGenerationInput): Promise<Ge
   if (input.audio_file && input.audio_file.size > MAX_AI_AUDIO_BYTES) {
     throw new Error("The voice note is too large. Record a new note under 30 seconds.");
   }
+  if (input.audio_file && (!input.audio_duration_seconds || input.audio_duration_seconds > MAX_AI_AUDIO_DURATION_SECONDS)) {
+    throw new Error("The voice note must be a valid recording shorter than 30 seconds.");
+  }
   if (input.image_file.size + (input.audio_file?.size ?? 0) > MAX_AI_MEDIA_BYTES) {
     throw new Error("The image and voice note are too large together. Use a smaller image.");
   }
@@ -36,7 +40,10 @@ export async function generateListing(input: CatalogGenerationInput): Promise<Ge
   form.append("artisan_name", input.artisan_name);
   form.append("language_code", input.source_language);
   form.append("description", input.typed_hint ?? "");
-  if (input.audio_file) form.append("audio", input.audio_file);
+  if (input.audio_file) {
+    form.append("audio", input.audio_file);
+    form.append("audio_duration_seconds", String(input.audio_duration_seconds));
+  }
 
   try {
     return await apiRequest<GeneratedListing>("/api/seller/snaplist/generate", {

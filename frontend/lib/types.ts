@@ -31,6 +31,7 @@ export type ArtisanProfile = {
 export type CatalogGenerationInput = {
   image_file: File;
   audio_file?: File;
+  audio_duration_seconds?: number;
   typed_hint?: string;
   source_language: LanguageCode;
   ai_provider: AiProvider;
